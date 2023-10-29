@@ -1,0 +1,108 @@
+- name: Install htop, tree, Epiphany, VSCode and PostgreSQL
+  hosts: somegroup
+  become: yes
+
+  tasks:
+    - name: Update the package manager
+      apt:
+        update_cache: yes
+
+    - name: Install htop, tree, Epiphany, Nginx, PostgreSQL and additional packages
+      apt:
+        name:
+          - htop
+          - tree
+          - epiphany-browser
+          - nginx
+          - postgresql
+          - postgresql-contrib
+        state: present
+
+    - name: Download VSCode DEB
+      get_url:
+        url: "https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-arm64"
+        dest: /tmp/code.deb
+
+    - name: Install VSCode DEB
+      command: dpkg -i /tmp/code.deb
+
+    - name: Delete VSCode DEB
+      file:
+        path: /tmp/code.deb
+        state: absent
+
+    # - name: Create db (postgresql)
+    #   become_user: postgres
+    #   command: createdb ansible_db
+
+    # - name: Create table
+    #   become_user: postgres
+    #   command: psql -d ansible_db -c "CREATE TABLE my_table (id SERIAL PRIMARY KEY, name VARCHAR(255));"
+
+  
+    - name: Create directory for site (nginx)
+      become: yes
+      file:
+        path: /usr/share/nginx/html
+        state: directory
+
+    - name: Copy custom index.html
+      copy:
+        src: /Users/ivan/Desktop/Ansible/index.html
+        dest: /usr/share/nginx/html/index.html
+
+    - name: Copy Nginx configuration file
+      copy:
+        src: /Users/ivan/Desktop/Ansible/my_site.conf
+        dest: /etc/nginx/sites-available/my_site.conf
+
+    - name: Install OpenSSL and GnuPG
+      become: yes
+      apt:
+        name:
+          - openssl
+          - gnupg
+        state: present
+
+    - name: Create SSL directory
+      become: yes
+      file:
+        path: /etc/nginx/ssl
+        state: directory
+
+# на локальному ноуті:
+# openssl genrsa -out my_key.key 2048           
+# openssl req -new -key my_key.key -out my_csr.csr
+# openssl x509 -req -days 365 -in my_csr.csr -signkey my_key.key -out my_cert.crt
+
+    - name: Copy SSL key
+      copy:
+        src: /Users/ivan/Desktop/Ansible/my_key.key
+        dest: /etc/nginx/ssl/my_key.key
+
+    - name: Copy SSL certificate
+      copy:
+        src: /Users/ivan/Desktop/Ansible/my_cert.crt
+        dest: /etc/nginx/ssl/my_cert.crt
+
+    - name: Generate SSL key if not exists
+      become: yes
+      command: openssl genrsa -out /etc/nginx/ssl/my_key.key 2048
+      args:
+        creates: /etc/nginx/ssl/my_key.key
+
+    - name: Copy csr_config.txt to remote servers
+      become: yes
+      copy:
+        src: /Users/ivan/Desktop/Ansible/csr_config.txt
+        dest: /etc/nginx/ssl/csr_config.txt
+    
+    - name: Generate CSR if not exists
+      become: yes
+      command: openssl req -new -key /etc/nginx/ssl/my_key.key -out /etc/nginx/ssl/my_csr.csr -config /etc/nginx/ssl/csr_config.txt
+      args:
+        creates: /etc/nginx/ssl/my_csr.csr
+    
+    - name: restart Nginx
+      become: yes
+      shell: systemctl restart nginx
